@@ -41,8 +41,8 @@ struct BPB {
 	u32  BPB_TotSec32;  //如果BPB_FATSz16为0，该值为FAT扇区数  
 };
 /* 
-BPB这里就取这么多，长度25字节
-实际上第一扇区512字节都是BPB引导扇区，结束标志0xAA55
+BPB条目结束，长度25字节
+boot扇区共有512字节，结束标志0xAA55
 偏移量510 Bytes,占用2 Bytes
 */
 
