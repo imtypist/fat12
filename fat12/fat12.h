@@ -16,7 +16,8 @@ int  SecPerClus;    //每簇扇区数
 int  RsvdSecCnt;    //Boot记录占用的扇区数  
 int  NumFATs;   //FAT表个数  
 int  RootEntCnt;    //根目录最大文件数  
-int  FATSz; //FAT扇区数  
+int  TotSec; //扇区总数
+int  FATSz; // FAT扇区数
 
 
 #pragma pack (1) /*指定按1字节对齐*/  
@@ -38,7 +39,7 @@ struct BPB {
 	u16  BPB_SecPerTrk; // 每磁道扇区数
 	u16  BPB_NumHeads; // 磁头数
 	u32  BPB_HiddSec; // 隐藏扇区数
-	u32  BPB_TotSec32;  //如果BPB_FATSz16为0，该值为FAT扇区数  
+	u32  BPB_TotSec32;  //如果BPB_TotSec16为0，该值为FAT扇区数  
 };
 /* 
 BPB条目结束，长度25字节
@@ -48,11 +49,11 @@ boot扇区共有512字节，结束标志0xAA55
 
 //根目录条目  
 struct RootEntry {
-	char DIR_Name[11];
+	char DIR_Name[11]; // 文件名8字节，扩展名3字节
 	u8   DIR_Attr;      //文件属性  
-	char reserved[10];
-	u16  DIR_WrtTime;
-	u16  DIR_WrtDate;
+	char reserved[10]; //保留字段
+	u16  DIR_WrtTime; //修改时间
+	u16  DIR_WrtDate; // 修改日期
 	u16  DIR_FstClus;   //开始簇号  
 	u32  DIR_FileSize;
 };
@@ -127,15 +128,15 @@ pszFolderName：文件夹名称，如"MyFolder"等等
 
 DLL_API BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName);
 /*
-要求：在指定路径下，删除指定名称的文件夹。如果目录不存在或待创建的文件夹不存在，则返回FALSE。
+要求：在指定路径下，删除指定名称的文件夹。如果目录不存在或待删除的文件夹不存在，则返回FALSE。
 删除成功返回TRUE；
 传入参数：
 pszFolderPath：目录路径，如"C:\\Test\\Test01"等等
 pszFolderName：文件夹名称，如"MyFolder"等等
-返回值：如果目录不存在或待创建的文件夹不存在，则返回FALSE。删除成功返回TRUE；
+返回值：如果目录不存在或待删除的文件夹不存在，则返回FALSE。删除成功返回TRUE；
 */
 
-DLL_API BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod);
+BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod);
 /*
 用途：移动指定文件的文件头，读写不同位置。如果文件句柄不存在，返回FALSE，否则返回TRUE
 dwHandle：MyOpenFile返回的值，在这个函数中又原封不动的传给你，其内部数据结构由你来定。
@@ -146,7 +147,15 @@ MY_FILE_CURRENT：从当前磁头位置开始计算便宜
 MY_FILE_END：从末尾开始计算偏移
 */
 
-BOOL init();
+BOOL initBPB();
+/*
+用途：读取BPB块
+*/
+
+BOOL isFileExist(char *pszFolderPath, char *pszFileName);
+/*
+用途：判断该文件/目录是否存在
+*/
 
 #ifdef __cplusplus
 }
