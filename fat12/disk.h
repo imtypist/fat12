@@ -93,4 +93,26 @@ u16 getFATValue(u16 FstClus);
 用途：获取文件下一簇FAT项
 */
 
+void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 FileSize);
+/*
+用途：创建目录或者文件时初始化信息
+FileName是目录或文件信息
+FileAttr是目录0x10或者文件0x20两个值
+FileSize是文件大小，目录默认为512，即一个扇区
+*/
+
+BOOL writeEmptyClus(u16 FstClus, u32 FileSize, RootEntry* FileInfo);
+/*
+用途：查询可用的簇
+FstClus是当前目录的首簇
+FileSize是文件大小
+RootEntry为待写入文件信息结构体指针
+*/
+
+u16 setFATValue(int clusNum);
+/*
+用途：查询可用簇，链接簇链，并初始化目录项
+clusNum为需要分配的簇个数
+*/
+
 #endif
