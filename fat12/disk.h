@@ -3,13 +3,11 @@
 #ifndef _DISK_H_
 #define _DISK_H_
 
-#define MAX_NUM 512
+#define MAX_NUM 1024
 
 typedef unsigned char u8;   //1字节  
 typedef unsigned short u16; //2字节  
 typedef unsigned int u32;   //4字节  
-
-//RootEntry dwHandles[MAX_NUM] = { NULL };
 
 int  BytsPerSec;    //每扇区字节数  
 int  SecPerClus;    //每簇扇区数  
@@ -113,6 +111,11 @@ u16 setFATValue(int clusNum);
 /*
 用途：查询可用簇，链接簇链，并初始化目录项
 clusNum为需要分配的簇个数
+*/
+
+DWORD createHandle(RootEntry* FileInfo);
+/*
+用途：分配句柄
 */
 
 #endif

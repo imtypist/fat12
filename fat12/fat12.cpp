@@ -4,6 +4,8 @@ using namespace std;
 
 const char* fs = "d:\\floppy.img";
 
+RootEntry* dwHandles[MAX_NUM] = { NULL };
+
 BPB bpb;
 BPB* bpb_ptr = &bpb;
 
@@ -14,19 +16,78 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
 	u16 FstClus;
 	u32 FileSize = 0; // 初始值为0
-	RootEntry FileInfo;
-	RootEntry* FileInfo_ptr = &FileInfo;
+	RootEntry* FileInfo_ptr = (RootEntry*)malloc(sizeof(RootEntry));
 	if (initBPB()) {
-		if (FstClus = isPathExist(pszFolderPath)) {
+		// 路径存在或者为根目录
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
 			if (isFileExist(pszFileName, FstClus)) {
 				cout << pszFolderPath << '\\' << pszFileName << " has existed!" << endl;
 			}
 			else {
 				initFileInfo(FileInfo_ptr, pszFileName, 0x20, FileSize);
-				if (writeEmptyClus(FstClus, FileSize, FileInfo_ptr)) {
+				if (writeEmptyClus(FstClus, FileSize, FileInfo_ptr) == TRUE) {
 					// 创建句柄
-
+					FileHandle = createHandle(FileInfo_ptr);
 				}
+			}
+		}
+	}
+	ShutdownDisk();
+	return FileHandle;
+}
+
+void MyCloseFile(DWORD dwHandle) {
+	free(dwHandles[dwHandle]);
+	dwHandles[dwHandle] = NULL;
+}
+
+DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
+	DWORD FileHandle = 0;
+	u16 FstClus;
+	BOOL isExist = FALSE;
+	char filename[13];
+	RootEntry* FileInfo_ptr = (RootEntry*)malloc(sizeof(RootEntry));
+	if (initBPB()) {
+		if (FstClus = isPathExist(pszFolderPath) || strlen(pszFolderPath) == 3) {
+			if (isFileExist(pszFileName, FstClus)) {
+				int dataBase;
+				do {
+					if (FstClus == 0) {
+						// 根目录区偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					}
+					else {
+						// 数据区文件首址偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+					}
+					for (int i = 0; i < RootEntCnt; i++) {
+						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+						if (ReadFromDisk(FileInfo_ptr, 32, NULL) != 0) {
+							// 目录0x10，文件0x20，卷标0x28
+							int len_of_filename = 0;
+							if (FileInfo_ptr->DIR_Attr == 0x20) {
+								for (int j = 0; j < 11; j++) {
+									if (FileInfo_ptr->DIR_Name[j] != ' ') {
+										filename[len_of_filename++] = FileInfo_ptr->DIR_Name[j];
+									}
+									else {
+										filename[len_of_filename++] = '.';
+										while (FileInfo_ptr->DIR_Name[j] == ' ') j++;
+										j--;
+									}
+								}
+								filename[len_of_filename] = '\0';
+								if (strcmp(filename, pszFileName) == 0) {
+									isExist = TRUE;
+									break;
+								}
+							}
+						}
+						dataBase += 32;
+					}
+					if (isExist) break;
+				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+				FileHandle = createHandle(FileInfo_ptr);
 			}
 		}
 	}
@@ -349,4 +410,15 @@ u16 setFATValue(int clusNum) {
 		WriteToDisk(bytes_ptr, 2, NULL);
 	}
 	return FstClus;
+}
+
+DWORD createHandle(RootEntry* FileInfo) {
+	int i;
+	for (i = 1; i < MAX_NUM; i++) {
+		if (dwHandles[i] == NULL) {
+			dwHandles[i] = FileInfo;
+			break;
+		}
+	}
+	return i;
 }
