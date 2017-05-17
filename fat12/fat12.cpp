@@ -96,6 +96,253 @@ void MyCloseFile(DWORD dwHandle) {
 	dwHandles[dwHandle] = NULL;
 }
 
+BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
+	BOOL result = FALSE;
+	u16 FstClus;
+	char filename[13];
+	RootEntry FileInfo;
+	RootEntry* FileInfo_ptr = &FileInfo;
+	if (initBPB()) {
+		if (FstClus = isPathExist(pszFolderPath) || strlen(pszFolderPath) == 3) {
+			if (isFileExist(pszFileName, FstClus)) {
+				int dataBase;
+				do {
+					if (FstClus == 0) {
+						// 根目录区偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					}
+					else {
+						// 数据区文件首址偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+					}
+					for (int i = 0; i < RootEntCnt; i++) {
+						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+						if (ReadFromDisk(FileInfo_ptr, 32, NULL) != 0) {
+							// 目录0x10，文件0x20，卷标0x28
+							int len_of_filename = 0;
+							if (FileInfo_ptr->DIR_Attr == 0x20) {
+								for (int j = 0; j < 11; j++) {
+									if (FileInfo_ptr->DIR_Name[j] != ' ') {
+										filename[len_of_filename++] = FileInfo_ptr->DIR_Name[j];
+									}
+									else {
+										filename[len_of_filename++] = '.';
+										while (FileInfo_ptr->DIR_Name[j] == ' ') j++;
+										j--;
+									}
+								}
+								filename[len_of_filename] = '\0';
+								// 忽略大小写比较
+								if (_stricmp(filename, pszFileName) == 0) {
+									// 上面读取了32字节，复位一下，第一字节写入0xe5
+									SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+									u8 del = 0xE5;
+									if (WriteToDisk(&del, 1, NULL) != 0) {
+										// 回收簇
+										u16 fileClus = FileInfo_ptr->DIR_FstClus; // 首簇
+										u16 bytes;
+										u16* bytes_ptr = &bytes;
+										// 下一簇为末尾簇退出循环
+										while (fileClus != 0xFFF) {
+											int clusBase = RsvdSecCnt * BytsPerSec + fileClus * 3 / 2;
+											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
+											u16 tempClus = getFATValue(fileClus); // 暂存下一簇，当前簇内容刷新成0
+											if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
+												if (fileClus % 2 == 0) {
+													bytes = bytes >> 12;
+													bytes = bytes << 12; // 低12位置0
+												}
+												else {
+													bytes = bytes << 12;
+													bytes = bytes >> 12; // 高12位置0
+												}
+												SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
+												WriteToDisk(bytes_ptr, 2, NULL); // 写回，回收该簇
+											}
+											fileClus = tempClus; // 更新偏移量
+										}
+										result = TRUE;
+										break;
+									}
+								}
+							}
+						}
+						dataBase += 32;
+					}
+					if (result) break;
+				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+			}
+		}
+	}
+	ShutdownDisk();
+	return result;
+}
+
+/*
+DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
+	DWORD result;
+	RootEntry* fileInfo = dwHandles[dwHandle];
+	
+}
+*/
+
+BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
+	u16 FstClus;
+	BOOL result = FALSE;
+	int dataBase;
+	if (initBPB()) {
+		// 路径存在或者为根目录
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+			if (isDirectoryExist(pszFolderName, FstClus)) {
+				cout << pszFolderPath << '\\' << pszFolderName << " has existed!" << endl;
+			}
+			else {
+				do {
+					if (FstClus == 0) {
+						// 根目录区偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					}
+					else {
+						// 数据区文件首址偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+					}
+					for (int i = 0; i < RootEntCnt; i++) {
+						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
+							// 目录项可用
+							if (rootEntry_ptr->DIR_Attr == 0x00 || rootEntry_ptr->DIR_Attr == 0xE5) {
+								time_t ts = getTS();
+								rootEntry_ptr->DIR_FstClus = setFATValue(1); // 为目录分配一个簇
+								strcpy(rootEntry_ptr->DIR_Name, pszFolderName);
+								rootEntry_ptr->DIR_Attr = 0x10; // 目录
+								rootEntry_ptr->DIR_FileSize = BytsPerSec; // 1扇区
+								rootEntry_ptr->DIR_WrtDate = getDOSDate(ts);
+								rootEntry_ptr->DIR_WrtTime = getDOSTime(ts);
+								SetHeaderOffset(dataBase, NULL, FILE_BEGIN); // 磁头复位
+								if (WriteToDisk(rootEntry_ptr, 32, NULL) != 0) {
+									result = TRUE;
+									break;
+								}
+							}
+						}
+						dataBase += 32;
+					}
+					if (result) break;
+				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+			}
+		}
+	}
+	ShutdownDisk();
+	return result;
+}
+
+BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
+	u16 FstClus;
+	BOOL result = FALSE;
+	char directory[12];
+	int dataBase;
+	if (initBPB()) {
+		// 路径存在或者为根目录
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+			// 待删除目录存在
+			if (isDirectoryExist(pszFolderName, FstClus)) {
+				do {
+					if (FstClus == 0) {
+						// 根目录区偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					}
+					else {
+						// 数据区文件首址偏移
+						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+					}
+					for (int i = 0; i < RootEntCnt; i++) {
+						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
+							// 目录0x10，文件0x20，卷标0x28
+							if (rootEntry_ptr->DIR_Attr == 0x10) {
+								for (int j = 0; j < 11; j++) {
+									if (rootEntry_ptr->DIR_Name[j] != ' ') {
+										directory[j] = rootEntry_ptr->DIR_Name[j];
+										if (j == 10) {
+											directory[11] = '\0';
+											break;
+										}
+									}
+									else {
+										directory[j] = '\0';
+										break;
+									}
+								}
+								// 忽略大小写比较
+								if (_stricmp(directory, pszFolderName) == 0) {
+									SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+									u8 del = 0xE5;
+									if (WriteToDisk(&del, 1, NULL) != 0) {
+										// 回收簇
+										u16 fileClus = rootEntry_ptr->DIR_FstClus; // 首簇
+										u16 bytes;
+										u16* bytes_ptr = &bytes;
+										// 下一簇为末尾簇退出循环
+										while (fileClus != 0xFFF) {
+											int clusBase = RsvdSecCnt * BytsPerSec + fileClus * 3 / 2;
+											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
+											u16 tempClus = getFATValue(fileClus); // 暂存下一簇，当前簇内容刷新成0
+											if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
+												if (fileClus % 2 == 0) {
+													bytes = bytes >> 12;
+													bytes = bytes << 12; // 低12位置0
+												}
+												else {
+													bytes = bytes << 12;
+													bytes = bytes >> 12; // 高12位置0
+												}
+												SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
+												WriteToDisk(bytes_ptr, 2, NULL); // 写回，回收该簇
+											}
+											fileClus = tempClus; // 更新偏移量
+										}
+										result = TRUE;
+										break;
+									}
+								}
+							}
+						}
+						dataBase += 32;
+					}
+					if (result) break;
+				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+			}
+		}
+	}
+	ShutdownDisk();
+	return result;
+}
+
+/*
+BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod) {
+	RootEntry* fileInfo = dwHandles[dwFileHandle];
+	if (fileInfo == NULL) return FALSE; // 句柄不存在
+	LONG offset = 32 * nOffset; // 偏移量字节数
+	u16 currentClus = fileInfo->DIR_FstClus; // 首簇
+	u32 fileSize = fileInfo->DIR_FileSize; // 文件大小
+	int fileBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (currentClus - 2) * BytsPerSec;
+	switch (dwMoveMethod) {
+	case MY_FILE_BEGIN:
+		if (offset < 0 || offset > fileSize) return FALSE; // 文件头开始移动不能为负
+
+		break;
+	case MY_FILE_CURRENT:
+
+		break;
+	case MY_FILE_END:
+		if (offset > 0 || offset < -fileSize) return FALSE; //文件尾开始移动不能为正
+
+		break;
+	}
+	return TRUE;
+}
+*/
+
 BOOL initBPB() {
 	if (StartupDisk(fs)) {
 		cout << "start up disk..." << endl;

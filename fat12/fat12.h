@@ -84,7 +84,7 @@ pszFolderName：文件夹名称，如"MyFolder"等等
 返回值：如果目录不存在或待删除的文件夹不存在，则返回FALSE。删除成功返回TRUE；
 */
 
-BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod);
+DLL_API BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod);
 /*
 用途：移动指定文件的文件头，读写不同位置。如果文件句柄不存在，返回FALSE，否则返回TRUE
 dwHandle：MyOpenFile返回的值，在这个函数中又原封不动的传给你，其内部数据结构由你来定。
