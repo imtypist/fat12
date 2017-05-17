@@ -12,7 +12,7 @@ int main() {
 		return 1;
 	}
 	MyCreateFile MCF = (MyCreateFile)GetProcAddress(h, "MyCreateFile");
-	MCF("C:\\DRAFTS","DOS.TXT");
+	MCF("c:\\drafts","dos.txt");
 	FreeLibrary(h);
 	return 0;
 }

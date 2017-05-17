@@ -36,11 +36,6 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	return FileHandle;
 }
 
-void MyCloseFile(DWORD dwHandle) {
-	free(dwHandles[dwHandle]);
-	dwHandles[dwHandle] = NULL;
-}
-
 DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
 	u16 FstClus;
@@ -77,7 +72,8 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 									}
 								}
 								filename[len_of_filename] = '\0';
-								if (strcmp(filename, pszFileName) == 0) {
+								// 忽略大小写比较
+								if (_stricmp(filename, pszFileName) == 0) {
 									isExist = TRUE;
 									break;
 								}
@@ -93,6 +89,11 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	}
 	ShutdownDisk();
 	return FileHandle;
+}
+
+void MyCloseFile(DWORD dwHandle) {
+	free(dwHandles[dwHandle]);
+	dwHandles[dwHandle] = NULL;
 }
 
 BOOL initBPB() {
@@ -166,7 +167,8 @@ BOOL isFileExist(char *pszFileName, u16 FstClus) {
 						}
 					}
 					filename[len_of_filename] = '\0';
-					if (strcmp(filename, pszFileName) == 0) {
+					// 忽略大小写比较
+					if (_stricmp(filename, pszFileName) == 0) {
 						isExist = TRUE;
 						break;
 					}
@@ -211,7 +213,8 @@ u16 isDirectoryExist(char *FolderName, u16 FstClus) {
 							break;
 						}
 					}
-					if (strcmp(directory, FolderName) == 0) {
+					// 忽略大小写比较
+					if (_stricmp(directory, FolderName) == 0) {
 						isExist = rootEntry_ptr->DIR_FstClus;
 						break;
 					}
