@@ -4,7 +4,7 @@ using namespace std;
 
 const char* fs = "d:\\floppy.img";
 
-RootEntry* dwHandles[MAX_NUM] = { NULL };
+FileHandle* dwHandles[MAX_NUM] = { NULL };
 
 BPB bpb;
 BPB* bpb_ptr = &bpb;
@@ -16,7 +16,8 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
 	u16 FstClus;
 	u32 FileSize = 0; // 初始值为0
-	RootEntry* FileInfo_ptr = (RootEntry*)malloc(sizeof(RootEntry));
+	RootEntry FileInfo;
+	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
 		// 路径存在或者为根目录
 		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
@@ -41,7 +42,8 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	u16 FstClus;
 	BOOL isExist = FALSE;
 	char filename[13];
-	RootEntry* FileInfo_ptr = (RootEntry*)malloc(sizeof(RootEntry));
+	RootEntry FileInfo;
+	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
 		if (FstClus = isPathExist(pszFolderPath) || strlen(pszFolderPath) == 3) {
 			if (isFileExist(pszFileName, FstClus)) {
@@ -664,9 +666,12 @@ u16 setFATValue(int clusNum) {
 
 DWORD createHandle(RootEntry* FileInfo) {
 	int i;
+	FileHandle* hd = (FileHandle*)malloc(sizeof(FileHandle)); // 统一在这里malloc
 	for (i = 1; i < MAX_NUM; i++) {
 		if (dwHandles[i] == NULL) {
-			dwHandles[i] = FileInfo;
+			memcpy(&hd->fileInfo, FileInfo, 32);
+			hd->offset = 0; // 偏移量初始化为0
+			dwHandles[i] = hd;
 			break;
 		}
 	}

@@ -55,7 +55,12 @@ struct RootEntry {
 	u16  DIR_FstClus;   //开始簇号  
 	u32  DIR_FileSize;
 };
-//根目录条目结束，32字节  
+//根目录条目结束，32字节
+
+struct FileHandle {
+	RootEntry fileInfo;
+	LONG offset; // 当前偏移
+}; // 文件句柄内部结构
 
 #pragma pack () /*取消指定对齐，恢复缺省对齐*/  
 
