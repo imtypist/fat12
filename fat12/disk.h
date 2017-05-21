@@ -60,6 +60,7 @@ struct RootEntry {
 struct FileHandle {
 	RootEntry fileInfo;
 	LONG offset; // 当前偏移
+	u16 parentClus; //所在目录簇号，0为根目录
 }; // 文件句柄内部结构
 
 #pragma pack () /*取消指定对齐，恢复缺省对齐*/  
@@ -104,11 +105,10 @@ FileAttr是目录0x10或者文件0x20两个值
 FileSize是文件大小，目录默认为512，即一个扇区
 */
 
-BOOL writeEmptyClus(u16 FstClus, u32 FileSize, RootEntry* FileInfo);
+BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo);
 /*
 用途：查询可用的簇
 FstClus是当前目录的首簇
-FileSize是文件大小
 RootEntry为待写入文件信息结构体指针
 */
 
@@ -118,7 +118,7 @@ u16 setFATValue(int clusNum);
 clusNum为需要分配的簇个数
 */
 
-DWORD createHandle(RootEntry* FileInfo);
+DWORD createHandle(RootEntry* FileInfo, u16 parentClus);
 /*
 用途：分配句柄
 */

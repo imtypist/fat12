@@ -15,9 +15,10 @@ RootEntry* rootEntry_ptr = &rootEntry;
 DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
 	u16 FstClus;
-	u32 FileSize = 0; // 初始值为0
+	u32 FileSize = 512; // 初始值为一个扇区大小
 	RootEntry FileInfo;
 	RootEntry* FileInfo_ptr = &FileInfo;
+	memset(FileInfo_ptr, 0, sizeof(RootEntry));
 	if (initBPB()) {
 		// 路径存在或者为根目录
 		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
@@ -26,9 +27,9 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 			}
 			else {
 				initFileInfo(FileInfo_ptr, pszFileName, 0x20, FileSize);
-				if (writeEmptyClus(FstClus, FileSize, FileInfo_ptr) == TRUE) {
+				if (writeEmptyClus(FstClus, FileInfo_ptr) == TRUE) {
 					// 创建句柄
-					FileHandle = createHandle(FileInfo_ptr);
+					FileHandle = createHandle(FileInfo_ptr, FstClus);
 				}
 			}
 		}
@@ -39,13 +40,15 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 
 DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
-	u16 FstClus;
+	u16 FstClus = 0;
 	BOOL isExist = FALSE;
 	char filename[13];
 	RootEntry FileInfo;
 	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
-		if (FstClus = isPathExist(pszFolderPath) || strlen(pszFolderPath) == 3) {
+		// fix bug:优先级，赋值记得加括号
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+			u16 parentClus = FstClus;
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
 				do {
@@ -85,7 +88,7 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 					}
 					if (isExist) break;
 				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
-				FileHandle = createHandle(FileInfo_ptr);
+				FileHandle = createHandle(FileInfo_ptr, parentClus);
 			}
 		}
 	}
@@ -105,7 +108,7 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 	RootEntry FileInfo;
 	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
-		if (FstClus = isPathExist(pszFolderPath) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
 				do {
@@ -237,6 +240,36 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 						return -1;
 					}
 				}
+				hd->fileInfo.DIR_FileSize += BytsPerSec; // 文件大小加一个扇区
+				//////////////////////////////////////// 文件大小加一个扇区
+				int dBase;
+				BOOL isExist = FALSE;
+				// 遍历当前目录所有项目
+				u16 parentClus = hd->parentClus;
+				do {
+					if (parentClus == 0) {
+						dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					}
+					else {
+						dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
+					}
+					for (int i = 0; i < RootEntCnt; i++) {
+						SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
+							if (rootEntry_ptr->DIR_Attr == 0x20) {
+								if (_stricmp(rootEntry_ptr->DIR_Name, hd->fileInfo.DIR_Name) == 0) {
+									SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+									WriteToDisk(&hd->fileInfo, 32, NULL);
+									isExist = TRUE;
+									break;
+								}
+							}
+						}
+						dBase += 32;
+					}
+					if (isExist) break;
+				} while ((parentClus = getFATValue(parentClus)) == 0xFFF || parentClus == 0);
+				//////////////////////////////////////////////
 			}
 			FstClus = getFATValue(FstClus); // 真正拿到下一个FAT
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec; // 刷新扇区偏移
@@ -703,6 +736,11 @@ void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 File
 		int i = 0;
 		while (FileName[i] != '\0') {
 			if (FileName[i] == '.') {
+				int j = i;
+				while (j < 8) {
+					FileInfo_ptr->DIR_Name[j] = 0x20;
+					j++;
+				}
 				i++;
 				break;
 			}
@@ -714,11 +752,17 @@ void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 File
 		}
 		memcpy(&FileInfo_ptr->DIR_Name[8], &FileName[i], 3);
 	}
-	int clusNum = FileSize / BytsPerSec + 1;
+	int clusNum;
+	if ((FileSize % BytsPerSec) == 0 && FileSize != 0) {
+		clusNum = FileSize / BytsPerSec;
+	}
+	else {
+		clusNum = FileSize / BytsPerSec + 1;
+	}
 	FileInfo_ptr->DIR_FstClus = setFATValue(clusNum);
 }
 
-BOOL writeEmptyClus(u16 FstClus, u32 FileSize, RootEntry* FileInfo) {
+BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 	int dataBase;
 	BOOL success = FALSE;
 	do {
@@ -735,6 +779,7 @@ BOOL writeEmptyClus(u16 FstClus, u32 FileSize, RootEntry* FileInfo) {
 			if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 				// 说明该目录项可用
 				if (rootEntry_ptr->DIR_Attr == 0x00 || rootEntry_ptr->DIR_Attr == 0xE5) {
+					SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 					if (WriteToDisk(FileInfo, 32, NULL) != 0) {
 						success = TRUE;
 						break;
@@ -816,13 +861,14 @@ u16 setFATValue(int clusNum) {
 	return FstClus;
 }
 
-DWORD createHandle(RootEntry* FileInfo) {
+DWORD createHandle(RootEntry* FileInfo, u16 parentClus) {
 	int i;
 	FileHandle* hd = (FileHandle*)malloc(sizeof(FileHandle)); // 统一在这里malloc
 	for (i = 1; i < MAX_NUM; i++) {
 		if (dwHandles[i] == NULL) {
 			memcpy(&hd->fileInfo, FileInfo, 32);
 			hd->offset = 0; // 偏移量初始化为0
+			hd->parentClus = parentClus;
 			dwHandles[i] = hd;
 			break;
 		}
