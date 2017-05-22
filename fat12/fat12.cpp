@@ -86,9 +86,11 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 						}
 						dataBase += 32;
 					}
-					if (isExist) break;
-				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
-				FileHandle = createHandle(FileInfo_ptr, parentClus);
+					if (isExist) { 
+						FileHandle = createHandle(FileInfo_ptr, parentClus);
+						break; 
+					}
+				} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 			}
 		}
 	}
@@ -175,7 +177,7 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 						dataBase += 32;
 					}
 					if (result) break;
-				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+				} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 			}
 		}
 	}
@@ -186,12 +188,15 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 	DWORD result = 0;
 	FileHandle* hd = dwHandles[dwHandle];
-	if (hd == NULL) return -1;
+	if (hd == NULL || initBPB() == FALSE) return -1;
 	u16 FstClus = hd->fileInfo.DIR_FstClus;
 	LONG offset = hd->offset; // 文件指针当前偏移
 	int curClusNum = offset / BytsPerSec; // 当前指针在第几个扇区
 	int curClusOffset = offset % BytsPerSec; // 当前在扇区内偏移
 	while (curClusNum) {
+		if (getFATValue(FstClus) == 0xFFF) {
+			break;
+		}
 		FstClus = getFATValue(FstClus);
 		curClusNum--;
 	}// 获取当前指针所指扇区
@@ -268,35 +273,36 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 						dBase += 32;
 					}
 					if (isExist) break;
-				} while ((parentClus = getFATValue(parentClus)) == 0xFFF || parentClus == 0);
+				} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
 				//////////////////////////////////////////////
 			}
-			FstClus = getFATValue(FstClus); // 真正拿到下一个FAT
+			FstClus = tempClus; // 真正拿到下一个FAT
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec; // 刷新扇区偏移
-			SetHeaderOffset(dataOffset, NULL, FILE_BEGIN);
+			SetHeaderOffset(dataBase, NULL, FILE_BEGIN); // 一定是从扇区头开始写
 			if (leftLen > BytsPerSec) {
-				if (WriteToDisk(&cBuffer[hasWritten - 1], BytsPerSec, &temp) == 0) {
+				if (WriteToDisk(&cBuffer[hasWritten], BytsPerSec, &temp) == 0) {
 					return -1;
 				}
 				hasWritten += BytsPerSec;
 			}
 			else {
-				if (WriteToDisk(&cBuffer[hasWritten - 1], leftLen, &temp) == 0) {
+				if (WriteToDisk(&cBuffer[hasWritten], leftLen, &temp) == 0) {
 					return -1;
 				}
 				hasWritten += leftLen;
 			}
 			leftLen -= BytsPerSec;
 			result += temp;
-		} while (leftLen <= 0);
+		} while (leftLen > 0);
 	}
+	ShutdownDisk();
 	return result;
 }
 
 DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 	DWORD result = 0;
 	FileHandle* hd = dwHandles[dwHandle];
-	if (hd == NULL) return -1;
+	if (hd == NULL || initBPB() == FALSE) return -1;
 	u16 FstClus = hd->fileInfo.DIR_FstClus;
 	LONG offset = hd->offset; // 文件指针当前偏移
 	int curClusNum = offset / BytsPerSec; // 当前指针在第几个扇区
@@ -309,6 +315,7 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 	int dataOffset = dataBase + curClusOffset; // 拿到文件指针所指位置
 	int lenOfBuffer = dwBytesToRead; // 缓冲区待读入长度
 	char* cBuffer = (char*)malloc(sizeof(u8)*lenOfBuffer); // 创建一个缓冲区
+	memset(cBuffer, 0, lenOfBuffer);
 	SetHeaderOffset(dataOffset, NULL, FILE_BEGIN);
 	// 读取
 	if (BytsPerSec - offset >= lenOfBuffer) {
@@ -330,24 +337,25 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 				break;
 			}
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec; // 刷新扇区偏移
-			SetHeaderOffset(dataOffset, NULL, FILE_BEGIN);
+			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 			if (leftLen > BytsPerSec) {
-				if (ReadFromDisk(&cBuffer[hasRead - 1], BytsPerSec, &temp) == 0) {
+				if (ReadFromDisk(&cBuffer[hasRead], BytsPerSec, &temp) == 0) {
 					return -1;
 				}
 				hasRead += BytsPerSec;
 			}
 			else {
-				if (WriteToDisk(&cBuffer[hasRead - 1], leftLen, &temp) == 0) {
+				if (WriteToDisk(&cBuffer[hasRead], leftLen, &temp) == 0) {
 					return -1;
 				}
 				hasRead += leftLen;
 			}
 			leftLen -= BytsPerSec; // 直接减掉一个扇区，只要是<=0就退出循环
 			result += temp;
-		} while (leftLen <= 0);
+		} while (leftLen > 0);
 	}
 	memcpy(pBuffer, cBuffer, lenOfBuffer); // 写入缓冲区
+	ShutdownDisk();
 	return result;
 }
 
@@ -393,7 +401,7 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 						dataBase += 32;
 					}
 					if (result) break;
-				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+				} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 			}
 		}
 	}
@@ -475,7 +483,7 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 						dataBase += 32;
 					}
 					if (result) break;
-				} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+				} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 			}
 		}
 	}
@@ -485,7 +493,7 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 
 BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod) {
 	FileHandle* hd = dwHandles[dwFileHandle];
-	if (hd == NULL) return FALSE; // 句柄不存在
+	if (hd == NULL || initBPB() == FALSE) return FALSE; // 句柄不存在
 	LONG curOffset = nOffset + hd->offset; // current模式下偏移后的位置
 	u16 currentClus = hd->fileInfo.DIR_FstClus; // 首簇
 	int fileSize = hd->fileInfo.DIR_FileSize; // 文件大小
@@ -525,6 +533,7 @@ BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod) {
 		}
 		break;
 	}
+	ShutdownDisk();
 	return TRUE;
 }
 
@@ -609,7 +618,7 @@ BOOL isFileExist(char *pszFileName, u16 FstClus) {
 			dataBase += 32;
 		}
 		if (isExist) break;
-	} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+	} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 	return isExist;
 }
 
@@ -655,7 +664,7 @@ u16 isDirectoryExist(char *FolderName, u16 FstClus) {
 			dataBase += 32;
 		}
 		if (isExist) break;
-	} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+	} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 	return isExist;
 }
 
@@ -789,7 +798,7 @@ BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 			dataBase += 32;
 		}
 		if (success) break;
-	} while ((FstClus = getFATValue(FstClus)) == 0xFFF || FstClus == 0);
+	} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 	return success;
 }
 
