@@ -40,28 +40,29 @@ int main() {
 	// 移动文件指针
 	//*
 	MySetFilePointer MFP = (MySetFilePointer)GetProcAddress(h, "MySetFilePointer");
-	MFP(res, 0, MY_FILE_END);
+	MFP(res, -64, MY_FILE_END);
 	//*/
 
 	// 写文件
 	//*
 	MyWriteFile MWF = (MyWriteFile)GetProcAddress(h, "MyWriteFile");
-	char pBuffer[512] = { 0 };
-	for (int i = 0; i < 512; i++) {
-		pBuffer[i] = 'c';
+	char pBuffer[768] = { 0 };
+	for (int i = 0; i < 768; i++) {
+		pBuffer[i] = '6';
 	}
-	res = MWF(res, &pBuffer, 512);
+	res = MWF(res, &pBuffer, 768);
 	cout << "MyWriteFile => return " << res << endl;
 	//*/
 
 	// 读文件
 	/*
 	MyReadFile MRF = (MyReadFile)GetProcAddress(h, "MyReadFile");
-	char rBuffer[32] = { 0 };
-	res = MRF(res, &rBuffer, 30);
+	char rBuffer[1024] = { 0 };
+	res = MRF(res, &rBuffer, 768);
 	cout << "MyReadFile => return " << res << endl;
 	cout << "rBuffer => " << rBuffer << endl;
-	/*/
+	cout << "rBuffer length => " << strlen(rBuffer) << endl;
+	//*/
 	FreeLibrary(h);
 	return 0;
 }

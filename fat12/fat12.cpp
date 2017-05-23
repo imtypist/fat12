@@ -15,7 +15,7 @@ RootEntry* rootEntry_ptr = &rootEntry;
 DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
 	u16 FstClus;
-	u32 FileSize = 512; // 初始值为一个扇区大小
+	u32 FileSize = 0; // 初始值为0
 	RootEntry FileInfo;
 	RootEntry* FileInfo_ptr = &FileInfo;
 	memset(FileInfo_ptr, 0, sizeof(RootEntry));
@@ -206,7 +206,7 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 	char* cBuffer = (char*)malloc(sizeof(u8)*lenOfBuffer);
 	memcpy(cBuffer, pBuffer, lenOfBuffer); // 复制过来
 	SetHeaderOffset(dataOffset, NULL, FILE_BEGIN);
-	if (BytsPerSec - offset >= lenOfBuffer) {
+	if ((BytsPerSec - curClusOffset >= lenOfBuffer) && curClusNum == 0) {
 		if (WriteToDisk(pBuffer, lenOfBuffer, &result) == 0) {
 			return -1;
 		}
@@ -217,12 +217,16 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 		u16 bytes; // 每次读取的簇号
 		u16* bytes_ptr = &bytes;
 		int fatBase = RsvdSecCnt * BytsPerSec;
-		if (WriteToDisk(pBuffer, BytsPerSec - offset, &temp) == 0) {
-			return -1;
+		int leftLen = lenOfBuffer;
+		int hasWritten = 0;
+		if (curClusNum == 0) {
+			if (WriteToDisk(pBuffer, BytsPerSec - curClusOffset, &temp) == 0) {
+				return -1;
+			}
+			result += temp; // 记录写入长度
+			leftLen = lenOfBuffer - (BytsPerSec - curClusOffset); // 剩余长度
+			hasWritten = BytsPerSec - curClusOffset;
 		}
-		result += temp; // 记录写入长度
-		int leftLen = lenOfBuffer - (BytsPerSec - offset); // 剩余长度
-		int hasWritten = BytsPerSec - offset;
 		do {
 			tempClus = getFATValue(FstClus); // 尝试拿下一个FAT
 			if (tempClus == 0xFFF) {
@@ -237,44 +241,13 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 					else {
 						bytes = bytes << 12;
 						bytes = bytes >> 12; // 保留低四位，高12位为0
-						tempClus = tempClus << 4;
-						bytes = bytes | tempClus;
+						bytes = bytes | (tempClus << 4);
 					}
 					SetHeaderOffset((fatBase + FstClus * 3 / 2), NULL, FILE_BEGIN);
 					if (WriteToDisk(bytes_ptr, 2, NULL) == 0) {
 						return -1;
 					}
 				}
-				hd->fileInfo.DIR_FileSize += BytsPerSec; // 文件大小加一个扇区
-				//////////////////////////////////////// 文件大小加一个扇区
-				int dBase;
-				BOOL isExist = FALSE;
-				// 遍历当前目录所有项目
-				u16 parentClus = hd->parentClus;
-				do {
-					if (parentClus == 0) {
-						dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
-					}
-					else {
-						dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
-					}
-					for (int i = 0; i < RootEntCnt; i++) {
-						SetHeaderOffset(dBase, NULL, FILE_BEGIN);
-						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
-							if (rootEntry_ptr->DIR_Attr == 0x20) {
-								if (_stricmp(rootEntry_ptr->DIR_Name, hd->fileInfo.DIR_Name) == 0) {
-									SetHeaderOffset(dBase, NULL, FILE_BEGIN);
-									WriteToDisk(&hd->fileInfo, 32, NULL);
-									isExist = TRUE;
-									break;
-								}
-							}
-						}
-						dBase += 32;
-					}
-					if (isExist) break;
-				} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
-				//////////////////////////////////////////////
 			}
 			FstClus = tempClus; // 真正拿到下一个FAT
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec; // 刷新扇区偏移
@@ -284,13 +257,44 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 					return -1;
 				}
 				hasWritten += BytsPerSec;
+				hd->fileInfo.DIR_FileSize += BytsPerSec; // 文件大小加一个扇区
 			}
 			else {
 				if (WriteToDisk(&cBuffer[hasWritten], leftLen, &temp) == 0) {
 					return -1;
 				}
 				hasWritten += leftLen;
+				hd->fileInfo.DIR_FileSize += leftLen; // 文件大小加剩余长度
 			}
+			//////////////////////////////////////// 刷新文件大小
+			int dBase;
+			BOOL isExist = FALSE;
+			// 遍历当前目录所有项目
+			u16 parentClus = hd->parentClus;
+			do {
+				if (parentClus == 0) {
+					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+				}
+				else {
+					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
+				}
+				for (int i = 0; i < RootEntCnt; i++) {
+					SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+					if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
+						if (rootEntry_ptr->DIR_Attr == 0x20) {
+							if (_stricmp(rootEntry_ptr->DIR_Name, hd->fileInfo.DIR_Name) == 0) {
+								SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+								WriteToDisk(&hd->fileInfo, 32, NULL);
+								isExist = TRUE;
+								break;
+							}
+						}
+					}
+					dBase += 32;
+				}
+				if (isExist) break;
+			} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
+			//////////////////////////////////////////////
 			leftLen -= BytsPerSec;
 			result += temp;
 		} while (leftLen > 0);
@@ -308,29 +312,36 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 	int curClusNum = offset / BytsPerSec; // 当前指针在第几个扇区
 	int curClusOffset = offset % BytsPerSec; // 当前在扇区内偏移
 	while (curClusNum) {
+		if (getFATValue(FstClus) == 0xFFF) {
+			break;
+		}
 		FstClus = getFATValue(FstClus);
 		curClusNum--;
 	}// 获取当前指针所指扇区
+	if (curClusNum > 0 || offset > hd->fileInfo.DIR_FileSize) return -1; // 超出文件偏移范围了
 	int dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
 	int dataOffset = dataBase + curClusOffset; // 拿到文件指针所指位置
 	int lenOfBuffer = dwBytesToRead; // 缓冲区待读入长度
+	if (hd->fileInfo.DIR_FileSize - offset < lenOfBuffer) {
+		lenOfBuffer = hd->fileInfo.DIR_FileSize - offset;
+	}
 	char* cBuffer = (char*)malloc(sizeof(u8)*lenOfBuffer); // 创建一个缓冲区
 	memset(cBuffer, 0, lenOfBuffer);
 	SetHeaderOffset(dataOffset, NULL, FILE_BEGIN);
 	// 读取
-	if (BytsPerSec - offset >= lenOfBuffer) {
+	if (BytsPerSec - curClusOffset >= lenOfBuffer) {
 		if (ReadFromDisk(cBuffer, lenOfBuffer, &result) == 0) {
 			return -1;
 		}
 	}
 	else {
 		DWORD temp;
-		if (ReadFromDisk(cBuffer, BytsPerSec - offset, &temp) == 0) {
+		if (ReadFromDisk(cBuffer, BytsPerSec - curClusOffset, &temp) == 0) {
 			return -1;
 		}
 		result += temp; // 记录读取到的长度
-		int leftLen = lenOfBuffer - (BytsPerSec - offset); // 剩余长度
-		int hasRead = BytsPerSec - offset;
+		int leftLen = lenOfBuffer - (BytsPerSec - curClusOffset); // 剩余长度
+		int hasRead = BytsPerSec - curClusOffset;
 		do {
 			FstClus = getFATValue(FstClus); // 拿到下一个FAT
 			if (FstClus == 0xFFF) {
@@ -345,7 +356,7 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 				hasRead += BytsPerSec;
 			}
 			else {
-				if (WriteToDisk(&cBuffer[hasRead], leftLen, &temp) == 0) {
+				if (ReadFromDisk(&cBuffer[hasRead], leftLen, &temp) == 0) {
 					return -1;
 				}
 				hasRead += leftLen;
@@ -529,7 +540,7 @@ BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod) {
 			hd->offset = 0;
 		}
 		else {
-			hd->offset = fileSize - nOffset;
+			hd->offset = fileSize + nOffset;
 		}
 		break;
 	}
@@ -848,7 +859,12 @@ u16 setFATValue(int clusNum) {
 				if (clusNum == ++i) break; // 到尾簇退出循环
 			}
 		}
-		fatPos++; // 往后偏一个字节
+		if (clus % 2 == 0) {
+			fatPos++; // 往后偏一个字节
+		}
+		else {
+			fatPos += 2; // 往后偏2个字节
+		}
 		clus++; // 簇号加一
 	} while (TRUE);
 	// 尾簇补0xfff
