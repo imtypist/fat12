@@ -6,6 +6,8 @@ const char* fs = "d:\\floppy.img";
 
 FileHandle* dwHandles[MAX_NUM] = { NULL };
 
+u8* setzero = (u8*)calloc(512, sizeof(u8)); // 用于创建目录时清0
+
 BPB bpb;
 BPB* bpb_ptr = &bpb;
 
@@ -52,15 +54,18 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
 				do {
+					int loop;
 					if (FstClus == 0) {
 						// 根目录区偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+						loop = RootEntCnt;
 					}
 					else {
 						// 数据区文件首址偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+						loop = BytsPerSec / 32;
 					}
-					for (int i = 0; i < RootEntCnt; i++) {
+					for (int i = 0; i < loop; i++) {
 						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 						if (ReadFromDisk(FileInfo_ptr, 32, NULL) != 0) {
 							// 目录0x10，文件0x20，卷标0x28
@@ -114,15 +119,18 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
 				do {
+					int loop;
 					if (FstClus == 0) {
 						// 根目录区偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+						loop = RootEntCnt;
 					}
 					else {
 						// 数据区文件首址偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+						loop = BytsPerSec / 32;
 					}
-					for (int i = 0; i < RootEntCnt; i++) {
+					for (int i = 0; i < loop; i++) {
 						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 						if (ReadFromDisk(FileInfo_ptr, 32, NULL) != 0) {
 							// 目录0x10，文件0x20，卷标0x28
@@ -152,8 +160,8 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 										// 下一簇为末尾簇退出循环
 										while (fileClus != 0xFFF) {
 											int clusBase = RsvdSecCnt * BytsPerSec + fileClus * 3 / 2;
-											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
 											u16 tempClus = getFATValue(fileClus); // 暂存下一簇，当前簇内容刷新成0
+											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
 											if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
 												if (fileClus % 2 == 0) {
 													bytes = bytes >> 12;
@@ -272,13 +280,16 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 			// 遍历当前目录所有项目
 			u16 parentClus = hd->parentClus;
 			do {
+				int loop;
 				if (parentClus == 0) {
 					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+					loop = RootEntCnt;
 				}
 				else {
 					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
+					loop = BytsPerSec / 32;
 				}
-				for (int i = 0; i < RootEntCnt; i++) {
+				for (int i = 0; i < loop; i++) {
 					SetHeaderOffset(dBase, NULL, FILE_BEGIN);
 					if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 						if (rootEntry_ptr->DIR_Attr == 0x20) {
@@ -372,38 +383,54 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 
 BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 	u16 FstClus;
+	u16 originClus;
 	BOOL result = FALSE;
 	int dataBase;
 	if (initBPB()) {
 		// 路径存在或者为根目录
 		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+			originClus = FstClus;
 			if (isDirectoryExist(pszFolderName, FstClus)) {
 				cout << pszFolderPath << '\\' << pszFolderName << " has existed!" << endl;
 			}
 			else {
 				do {
+					int loop;
 					if (FstClus == 0) {
 						// 根目录区偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+						loop = RootEntCnt;
 					}
 					else {
 						// 数据区文件首址偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+						loop = BytsPerSec / 32;
 					}
-					for (int i = 0; i < RootEntCnt; i++) {
+					for (int i = 0; i < loop; i++) {
 						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 							// 目录项可用
 							if (rootEntry_ptr->DIR_Attr == 0x00 || rootEntry_ptr->DIR_Attr == 0xE5) {
-								time_t ts = getTS();
-								rootEntry_ptr->DIR_FstClus = setFATValue(1); // 为目录分配一个簇
-								strcpy(rootEntry_ptr->DIR_Name, pszFolderName);
-								rootEntry_ptr->DIR_Attr = 0x10; // 目录
-								rootEntry_ptr->DIR_FileSize = BytsPerSec; // 1扇区
-								rootEntry_ptr->DIR_WrtDate = getDOSDate(ts);
-								rootEntry_ptr->DIR_WrtTime = getDOSTime(ts);
+								initFileInfo(rootEntry_ptr, pszFolderName, 0x10, 0); // 文件夹大小为0
 								SetHeaderOffset(dataBase, NULL, FILE_BEGIN); // 磁头复位
 								if (WriteToDisk(rootEntry_ptr, 32, NULL) != 0) {
+									// 创建 . 和 ..目录
+									int dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (rootEntry_ptr->DIR_FstClus - 2) * BytsPerSec;
+									SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+									WriteToDisk(setzero, BytsPerSec, NULL); // 目录创建初始清0
+									// .
+									SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+									rootEntry_ptr->DIR_FileSize = 0;
+									rootEntry_ptr->DIR_Name[0] = 0x2E;
+									for (int i = 1; i < 11; i++) {
+										rootEntry_ptr->DIR_Name[i] = 0x20;
+									}
+									WriteToDisk(rootEntry_ptr, 32, NULL);
+									// ..
+									SetHeaderOffset(dBase + 32, NULL, FILE_BEGIN);
+									rootEntry_ptr->DIR_Name[1] = 0x2E;
+									rootEntry_ptr->DIR_FstClus = originClus;
+									WriteToDisk(rootEntry_ptr, 32, NULL);
 									result = TRUE;
 									break;
 								}
@@ -431,15 +458,18 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 			// 待删除目录存在
 			if (isDirectoryExist(pszFolderName, FstClus)) {
 				do {
+					int loop;
 					if (FstClus == 0) {
 						// 根目录区偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+						loop = RootEntCnt;
 					}
 					else {
 						// 数据区文件首址偏移
 						dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+						loop = BytsPerSec / 32;
 					}
-					for (int i = 0; i < RootEntCnt; i++) {
+					for (int i = 0; i < loop; i++) {
 						SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 						if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 							// 目录0x10，文件0x20，卷标0x28
@@ -469,8 +499,8 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 										// 下一簇为末尾簇退出循环
 										while (fileClus != 0xFFF) {
 											int clusBase = RsvdSecCnt * BytsPerSec + fileClus * 3 / 2;
-											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
 											u16 tempClus = getFATValue(fileClus); // 暂存下一簇，当前簇内容刷新成0
+											SetHeaderOffset(clusBase, NULL, FILE_BEGIN);
 											if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
 												if (fileClus % 2 == 0) {
 													bytes = bytes >> 12;
@@ -594,15 +624,18 @@ BOOL isFileExist(char *pszFileName, u16 FstClus) {
 	BOOL isExist = FALSE;
 	// 遍历当前目录所有项目
 	do {
+		int loop;
 		if (FstClus == 0) {
 			// 根目录区偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+			loop = RootEntCnt;
 		}
 		else {
 			// 数据区文件首址偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+			loop = BytsPerSec / 32;
 		}
-		for (int i = 0; i < RootEntCnt; i++) {
+		for (int i = 0; i < loop; i++) {
 			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 			if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 				// 目录0x10，文件0x20，卷标0x28
@@ -639,15 +672,18 @@ u16 isDirectoryExist(char *FolderName, u16 FstClus) {
 	u16 isExist = 0;
 	// 遍历当前目录所有项目
 	do {
+		int loop;
 		if (FstClus == 0) {
 			// 根目录区偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+			loop = RootEntCnt;
 		}
 		else {
 			// 数据区文件首址偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+			loop = BytsPerSec / 32;
 		}
-		for (int i = 0; i < RootEntCnt; i++) {
+		for (int i = 0; i < loop; i++) {
 			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 			if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 				// 目录0x10，文件0x20，卷标0x28
@@ -747,13 +783,20 @@ void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 File
 	FileInfo_ptr->DIR_Attr = FileAttr;
 	FileInfo_ptr->DIR_WrtDate = getDOSDate(ts);
 	FileInfo_ptr->DIR_WrtTime = getDOSTime(ts);
+	int i = 0;
 	if (FileAttr == 0x10) {
-		FileInfo_ptr->DIR_FileSize = BytsPerSec;
-		strcpy(FileInfo_ptr->DIR_Name, FileName);
+		FileInfo_ptr->DIR_FileSize = 0;
+		while (FileName[i] != '\0') {
+			FileInfo_ptr->DIR_Name[i] = FileName[i];
+			i++;
+		}
+		while (i < 11) {
+			FileInfo_ptr->DIR_Name[i] = 0x20;
+			i++;
+		}
 	}
 	else {
 		FileInfo_ptr->DIR_FileSize = FileSize;
-		int i = 0;
 		while (FileName[i] != '\0') {
 			if (FileName[i] == '.') {
 				int j = i;
@@ -784,17 +827,22 @@ void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 File
 
 BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 	int dataBase;
+	u16 originClus;
 	BOOL success = FALSE;
 	do {
+		int loop;
+		originClus = FstClus; // 保存非0xfff簇号
 		if (FstClus == 0) {
 			// 根目录区偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+			loop = RootEntCnt;
 		}
 		else {
 			// 数据区文件首址偏移
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
+			loop = BytsPerSec / 32;
 		}
-		for (int i = 0; i < RootEntCnt; i++) {
+		for (int i = 0; i < loop; i++) {
 			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 			if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
 				// 说明该目录项可用
@@ -810,6 +858,37 @@ BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 		}
 		if (success) break;
 	} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
+	if (success == FALSE && FstClus != 0) { // 目录空间不足且不是根目录
+		u16 bytes;
+		u16* bytes_ptr;
+		int fatBase = RsvdSecCnt * BytsPerSec;
+		u16 tempClus = setFATValue(1);
+		dataBase = SetHeaderOffset((fatBase + originClus * 3 / 2), NULL, FILE_BEGIN); // 尾簇号偏移
+		SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+		if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
+			if (originClus % 2 == 0) {
+				bytes = bytes >> 12;
+				bytes = bytes << 12; // 保留高四位，低12位为0
+				bytes = bytes | tempClus;
+			}
+			else {
+				bytes = bytes << 12;
+				bytes = bytes >> 12; // 保留低四位，高12位为0
+				bytes = bytes | (tempClus << 4);
+			}
+			SetHeaderOffset((fatBase + originClus * 3 / 2), NULL, FILE_BEGIN);
+			if (WriteToDisk(bytes_ptr, 2, NULL) == 0) {
+				return -1;
+			}
+			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (tempClus - 2) * BytsPerSec;
+			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+			WriteToDisk(setzero, BytsPerSec, NULL); // 清0
+			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
+			if (WriteToDisk(FileInfo, 32, NULL) != 0) {
+				success = TRUE;
+			}
+		}
+	}
 	return success;
 }
 
