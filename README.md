@@ -1,5 +1,7 @@
 # fat12
 
+多多提[issue](https://github.com/imtypist/fat12/issues/new)找bug啊各位~:approve:
+
 ### 文件说明
 
 `image/` : fat12格式测试文件
