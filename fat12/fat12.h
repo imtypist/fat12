@@ -91,7 +91,7 @@ dwHandle：MyOpenFile返回的值，在这个函数中又原封不动的传给�
 nOffset：32位偏移量，可正可负可为零。
 dwMoveMethod：偏移的起始位置，有如下三种类型可选：
 MY_FILE_BEGIN：从头部开始计算偏移
-MY_FILE_CURRENT：从当前磁头位置开始计算便宜
+MY_FILE_CURRENT：从当前磁头位置开始计算偏移
 MY_FILE_END：从末尾开始计算偏移
 */
 

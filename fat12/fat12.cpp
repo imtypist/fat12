@@ -265,52 +265,53 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 					return -1;
 				}
 				hasWritten += BytsPerSec;
-				hd->fileInfo.DIR_FileSize += BytsPerSec; // 文件大小加一个扇区
 			}
 			else {
 				if (WriteToDisk(&cBuffer[hasWritten], leftLen, &temp) == 0) {
 					return -1;
 				}
 				hasWritten += leftLen;
-				hd->fileInfo.DIR_FileSize += leftLen; // 文件大小加剩余长度
 			}
-			//////////////////////////////////////// 刷新文件大小
-			int dBase;
-			BOOL isExist = FALSE;
-			// 遍历当前目录所有项目
-			u16 parentClus = hd->parentClus;
-			do {
-				int loop;
-				if (parentClus == 0) {
-					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
-					loop = RootEntCnt;
-				}
-				else {
-					dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
-					loop = BytsPerSec / 32;
-				}
-				for (int i = 0; i < loop; i++) {
-					SetHeaderOffset(dBase, NULL, FILE_BEGIN);
-					if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
-						if (rootEntry_ptr->DIR_Attr == 0x20) {
-							if (_stricmp(rootEntry_ptr->DIR_Name, hd->fileInfo.DIR_Name) == 0) {
-								SetHeaderOffset(dBase, NULL, FILE_BEGIN);
-								WriteToDisk(&hd->fileInfo, 32, NULL);
-								isExist = TRUE;
-								break;
-							}
-						}
-					}
-					dBase += 32;
-				}
-				if (isExist) break;
-			} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
-			//////////////////////////////////////////////
 			leftLen -= BytsPerSec;
 			result += temp;
 		} while (leftLen > 0);
 	}
+	// 刷新文件大小
+	if ((offset + result) > hd->fileInfo.DIR_FileSize) {
+		int dBase;
+		BOOL isExist = FALSE;
+		hd->fileInfo.DIR_FileSize += (offset + result) - hd->fileInfo.DIR_FileSize;
+		// 遍历当前目录所有项目
+		u16 parentClus = hd->parentClus;
+		do {
+			int loop;
+			if (parentClus == 0) {
+				dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec;
+				loop = RootEntCnt;
+			}
+			else {
+				dBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (parentClus - 2) * BytsPerSec;
+				loop = BytsPerSec / 32;
+			}
+			for (int i = 0; i < loop; i++) {
+				SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+				if (ReadFromDisk(rootEntry_ptr, 32, NULL) != 0) {
+					if (rootEntry_ptr->DIR_Attr == 0x20) {
+						if (_stricmp(rootEntry_ptr->DIR_Name, hd->fileInfo.DIR_Name) == 0) {
+							SetHeaderOffset(dBase, NULL, FILE_BEGIN);
+							WriteToDisk(&hd->fileInfo, 32, NULL);
+							isExist = TRUE;
+							break;
+						}
+					}
+				}
+				dBase += 32;
+			}
+			if (isExist) break;
+		} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
+	}
 	ShutdownDisk();
+	MySetFilePointer(dwHandle, result, MY_FILE_CURRENT); //偏移量刷新
 	return result;
 }
 
@@ -378,6 +379,7 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 	}
 	memcpy(pBuffer, cBuffer, lenOfBuffer); // 写入缓冲区
 	ShutdownDisk();
+	MySetFilePointer(dwHandle, result, MY_FILE_CURRENT); //偏移量刷新
 	return result;
 }
 
@@ -786,7 +788,7 @@ void initFileInfo(RootEntry* FileInfo_ptr, char* FileName, u8 FileAttr, u32 File
 	int i = 0;
 	if (FileAttr == 0x10) {
 		FileInfo_ptr->DIR_FileSize = 0;
-		while (FileName[i] != '\0') {
+		while (FileName[i] != '\0' && i < 11) {
 			FileInfo_ptr->DIR_Name[i] = FileName[i];
 			i++;
 		}

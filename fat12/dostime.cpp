@@ -5,7 +5,7 @@ int getDOSDate(time_t ts) {
 
     res = localtime(&ts);
 
-    return (res->tm_year - 80) * 512 + res->tm_mon * 32 + res->tm_mday;
+    return (res->tm_year - 80) * 512 + (res->tm_mon + 1) * 32 + res->tm_mday;
 }
 
 int getDOSTime(time_t ts) {

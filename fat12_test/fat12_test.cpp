@@ -27,26 +27,26 @@ int main() {
 	// 创建文件
 	/*
 	MyCreateFile MCF = (MyCreateFile)GetProcAddress(h, "MyCreateFile");
-	res = MCF("c:\\","test1.txt");
+	res = MCF("c:\\drafts\\huang","test.txt");
 	cout << "MyCreateFile => return " << res << endl;
 	//*/
 
 	// 删除文件
 	/*
 	MyDeleteFile MDF = (MyDeleteFile)GetProcAddress(h, "MyDeleteFile");
-	res = MDF("c:\\", "test1.txt");
+	res = MDF("c:\\", "huang.txt");
 	cout << "MyDeleteFile => return " << res << endl;
 	//*/
 
 	// 打开文件
 	//*
 	MyOpenFile MOF = (MyOpenFile)GetProcAddress(h, "MyOpenFile");
-	res = MOF("c:\\", "test1.txt");
+	res = MOF("c:\\drafts", "test.txt");
 	cout << "MyOpenFile => return " << res << endl;
 	//*/
 
 	// 关闭文件
-	//*
+	/*
 	MyCloseFile MCF = (MyCloseFile)GetProcAddress(h, "MyCloseFile");
 	MCF(res);
 	cout << "MyCloseFile => void"<< endl;
@@ -55,26 +55,26 @@ int main() {
 	// 移动文件指针
 	//*
 	MySetFilePointer MFP = (MySetFilePointer)GetProcAddress(h, "MySetFilePointer");
-	res = MFP(res, -64, MY_FILE_END);
+	res = MFP(res, 0, MY_FILE_END);
 	cout << "MySetFilePointer => return " << res << endl;
 	//*/
 
 	// 写文件
-	/*
+	//*
 	MyWriteFile MWF = (MyWriteFile)GetProcAddress(h, "MyWriteFile");
-	char pBuffer[768] = { 0 };
-	for (int i = 0; i < 768; i++) {
-		pBuffer[i] = '6';
+	char pBuffer[512] = { 0 };
+	for (int i = 0; i < 512; i++) {
+		pBuffer[i] = 'c';
 	}
-	res = MWF(res, &pBuffer, 768);
+	res = MWF(res, &pBuffer, 512);
 	cout << "MyWriteFile => return " << res << endl;
 	//*/
 
 	// 读文件
 	/*
 	MyReadFile MRF = (MyReadFile)GetProcAddress(h, "MyReadFile");
-	char rBuffer[1024] = { 0 };
-	res = MRF(res, &rBuffer, 768);
+	char rBuffer[1025] = { 0 };
+	res = MRF(res, &rBuffer, 1024);
 	cout << "MyReadFile => return " << res << endl;
 	cout << "rBuffer => " << rBuffer << endl;
 	cout << "rBuffer length => " << strlen(rBuffer) << endl;
@@ -83,7 +83,7 @@ int main() {
 	// 创建目录
 	/*
 	MyCreateDirectory MCD = (MyCreateDirectory)GetProcAddress(h, "MyCreateDirectory");
-	res = MCD("c:\\", "huang");
+	res = MCD("c:\\", "huangjunqin");
 	cout << "MyCreateDirectory => return " << res << endl;
 	//*/
 
