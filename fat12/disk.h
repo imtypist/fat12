@@ -123,4 +123,16 @@ DWORD createHandle(RootEntry* FileInfo, u16 parentClus);
 用途：分配句柄
 */
 
+BOOL recoverClus(u16 fileClus);
+/*
+用途：回收簇
+fileClus 首簇
+*/
+
+void recursiveDeleteDirectory(u16 fClus);
+/*
+用途：递归删除文件夹下的东西
+fClus保存待删除文件夹首簇
+*/
+
 #endif

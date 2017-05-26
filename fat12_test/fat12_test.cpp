@@ -27,7 +27,7 @@ int main() {
 	// 创建文件
 	/*
 	MyCreateFile MCF = (MyCreateFile)GetProcAddress(h, "MyCreateFile");
-	res = MCF("c:\\drafts\\huang","test.txt");
+	res = MCF("c:\\huang\\junqin","test4.txt");
 	cout << "MyCreateFile => return " << res << endl;
 	//*/
 
@@ -39,7 +39,7 @@ int main() {
 	//*/
 
 	// 打开文件
-	//*
+	/*
 	MyOpenFile MOF = (MyOpenFile)GetProcAddress(h, "MyOpenFile");
 	res = MOF("c:\\drafts", "test.txt");
 	cout << "MyOpenFile => return " << res << endl;
@@ -53,14 +53,14 @@ int main() {
 	//*/
 	
 	// 移动文件指针
-	//*
+	/*
 	MySetFilePointer MFP = (MySetFilePointer)GetProcAddress(h, "MySetFilePointer");
-	res = MFP(res, 0, MY_FILE_END);
+	res = MFP(res, -512, MY_FILE_END);
 	cout << "MySetFilePointer => return " << res << endl;
 	//*/
 
 	// 写文件
-	//*
+	/*
 	MyWriteFile MWF = (MyWriteFile)GetProcAddress(h, "MyWriteFile");
 	char pBuffer[512] = { 0 };
 	for (int i = 0; i < 512; i++) {
@@ -83,12 +83,12 @@ int main() {
 	// 创建目录
 	/*
 	MyCreateDirectory MCD = (MyCreateDirectory)GetProcAddress(h, "MyCreateDirectory");
-	res = MCD("c:\\", "huangjunqin");
+	res = MCD("c:\\huang", "junqin");
 	cout << "MyCreateDirectory => return " << res << endl;
 	//*/
 
 	// 删除目录
-	/*
+	//*
 	MyDeleteDirectory MCD = (MyDeleteDirectory)GetProcAddress(h, "MyDeleteDirectory");
 	res = MCD("c:\\", "huang");
 	cout << "MyDeleteDirectory => return " << res << endl;
