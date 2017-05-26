@@ -16,6 +16,7 @@ RootEntry* rootEntry_ptr = &rootEntry;
 
 DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
+	if (strlen(pszFileName) > 12 || strlen(pszFileName) < 3) return 0; // 最长 8+3+'.' ;最短 1+'.'+1
 	u16 FstClus;
 	u32 FileSize = 0; // 初始值为0
 	RootEntry FileInfo;
@@ -29,6 +30,7 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 			}
 			else {
 				initFileInfo(FileInfo_ptr, pszFileName, 0x20, FileSize);
+				if (FileInfo_ptr->DIR_FstClus == 0) return 0; // 分配簇失败
 				if (writeEmptyClus(FstClus, FileInfo_ptr) == TRUE) {
 					// 创建句柄
 					FileHandle = createHandle(FileInfo_ptr, FstClus);
@@ -42,6 +44,7 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 
 DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	DWORD FileHandle = 0;
+	if (strlen(pszFileName) > 12 || strlen(pszFileName) < 3) return 0; // 8+3+'.'
 	u16 FstClus = 0;
 	BOOL isExist = FALSE;
 	char filename[13];
@@ -112,6 +115,7 @@ void MyCloseFile(DWORD dwHandle) {
 
 BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 	BOOL result = FALSE;
+	if (strlen(pszFileName) > 12 || strlen(pszFileName) < 3) return FALSE; // 8+3+'.'
 	u16 FstClus;
 	char filename[13];
 	RootEntry FileInfo;
@@ -243,6 +247,7 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 			tempClus = getFATValue(FstClus); // 尝试拿下一个FAT
 			if (tempClus == 0xFFF) {
 				tempClus = setFATValue(1);
+				if (tempClus == 0) return -1; //分配簇失败
 				SetHeaderOffset((fatBase + FstClus * 3 / 2), NULL, FILE_BEGIN);
 				if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
 					if (FstClus % 2 == 0) {
@@ -391,6 +396,7 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 	u16 FstClus;
 	u16 originClus;
 	BOOL result = FALSE;
+	if (strlen(pszFolderName) > 11 || strlen(pszFolderName) <= 0) return FALSE;
 	int dataBase;
 	if (initBPB()) {
 		// 路径存在或者为根目录
@@ -418,6 +424,7 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 							// 目录项可用
 							if (rootEntry_ptr->DIR_Name[0] == 0x00 || rootEntry_ptr->DIR_Name[0] == 0xE5) {
 								initFileInfo(rootEntry_ptr, pszFolderName, 0x10, 0); // 文件夹大小为0
+								if (rootEntry_ptr->DIR_FstClus == 0) return FALSE;
 								SetHeaderOffset(dataBase, NULL, FILE_BEGIN); // 磁头复位
 								if (WriteToDisk(rootEntry_ptr, 32, NULL) != 0) {
 									// 创建 . 和 ..目录
@@ -456,6 +463,7 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 	u16 FstClus;
 	BOOL result = FALSE;
+	if (strlen(pszFolderName) > 11 || strlen(pszFolderName) <= 0) return FALSE;
 	if (initBPB()) {
 		// 路径存在或者为根目录
 		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
@@ -713,7 +721,8 @@ u16 isPathExist(char *pszFolderPath) {
 	u16 FstClus = 0;
 	/* 从3开始，跳过盘符C:\\ */
 	int i = 3, len = 0;
-	while (pszFolderPath[i] != '\0') {
+	// 设置边界值i<11
+	while (pszFolderPath[i] != '\0' && len <= 11) {
 		if (pszFolderPath[i] == '\\') {
 			directory[len] = '\0';
 			//cout << directory << endl;
@@ -727,9 +736,11 @@ u16 isPathExist(char *pszFolderPath) {
 			i++;
 		}
 		else {
+			if (len == 11) break; // 如果已经读了11字节还想读，则报目录名太长错
 			directory[len++] = pszFolderPath[i++];
 		}
 	}
+	if (pszFolderPath[i] != '\0' && len == 11) return 0; //说明中间某个目录名太长，退出
 	if (len > 0) {
 		directory[len] = '\0';
 		//cout << directory << endl;
@@ -856,6 +867,7 @@ BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 		u16* bytes_ptr;
 		int fatBase = RsvdSecCnt * BytsPerSec;
 		u16 tempClus = setFATValue(1);
+		if (tempClus == 0) return FALSE;
 		dataBase = SetHeaderOffset((fatBase + originClus * 3 / 2), NULL, FILE_BEGIN); // 尾簇号偏移
 		SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
 		if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
@@ -871,7 +883,7 @@ BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 			}
 			SetHeaderOffset((fatBase + originClus * 3 / 2), NULL, FILE_BEGIN);
 			if (WriteToDisk(bytes_ptr, 2, NULL) == 0) {
-				return -1;
+				return FALSE;
 			}
 			dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (tempClus - 2) * BytsPerSec;
 			SetHeaderOffset(dataBase, NULL, FILE_BEGIN);
@@ -895,6 +907,7 @@ u16 setFATValue(int clusNum) {
 	u16* bytes_ptr = &bytes;
 	u16 FstClus;
 	u16 preClus;
+	int loop = FATSz * BytsPerSec / 3 * 2 - 2; // 共有多少个簇
 	do {
 		SetHeaderOffset(fatPos, NULL, FILE_BEGIN);
 		if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
@@ -938,7 +951,8 @@ u16 setFATValue(int clusNum) {
 			fatPos += 2; // 往后偏2个字节
 		}
 		clus++; // 簇号加一
-	} while (TRUE);
+		loop--;
+	} while (loop > 0);
 	// 尾簇补0xfff
 	SetHeaderOffset((fatBase + preClus * 3 / 2), NULL, FILE_BEGIN);
 	if (ReadFromDisk(bytes_ptr, 2, NULL) != 0) {
@@ -955,7 +969,14 @@ u16 setFATValue(int clusNum) {
 		SetHeaderOffset((fatBase + preClus * 3 / 2), NULL, FILE_BEGIN);
 		WriteToDisk(bytes_ptr, 2, NULL);
 	}
-	return FstClus;
+	// 簇没分配成功，个数不够
+	if (clusNum != i) {
+		recoverClus(FstClus); // 分配失败，回滚操作
+		return 0;
+	}
+	else {
+		return FstClus;
+	}
 }
 
 DWORD createHandle(RootEntry* FileInfo, u16 parentClus) {

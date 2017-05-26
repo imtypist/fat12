@@ -116,6 +116,7 @@ u16 setFATValue(int clusNum);
 /*
 用途：查询可用簇，链接簇链，并初始化目录项
 clusNum为需要分配的簇个数
+返回值为0表示失败
 */
 
 DWORD createHandle(RootEntry* FileInfo, u16 parentClus);

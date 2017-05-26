@@ -27,7 +27,7 @@ int main() {
 	// 创建文件
 	/*
 	MyCreateFile MCF = (MyCreateFile)GetProcAddress(h, "MyCreateFile");
-	res = MCF("c:\\huang\\junqin","test4.txt");
+	res = MCF("c:\\","1.txt");
 	cout << "MyCreateFile => return " << res << endl;
 	//*/
 
@@ -81,14 +81,14 @@ int main() {
 	//*/
 
 	// 创建目录
-	/*
+	//*
 	MyCreateDirectory MCD = (MyCreateDirectory)GetProcAddress(h, "MyCreateDirectory");
-	res = MCD("c:\\huang", "junqin");
+	res = MCD("c:\\", "huangjunqin123");
 	cout << "MyCreateDirectory => return " << res << endl;
 	//*/
 
 	// 删除目录
-	//*
+	/*
 	MyDeleteDirectory MCD = (MyDeleteDirectory)GetProcAddress(h, "MyDeleteDirectory");
 	res = MCD("c:\\", "huang");
 	cout << "MyDeleteDirectory => return " << res << endl;
