@@ -136,4 +136,9 @@ void recursiveDeleteDirectory(u16 fClus);
 fClus保存待删除文件夹首簇
 */
 
+void syncFat12();
+/*
+同步FAT12
+*/
+
 #endif

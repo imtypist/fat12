@@ -25,9 +25,9 @@ int main() {
 		return 1;
 	}
 	// 创建文件
-	/*
+	//*
 	MyCreateFile MCF = (MyCreateFile)GetProcAddress(h, "MyCreateFile");
-	res = MCF("c:\\","1.txt");
+	res = MCF("c:\\", "random.doc");
 	cout << "MyCreateFile => return " << res << endl;
 	//*/
 
@@ -81,7 +81,7 @@ int main() {
 	//*/
 
 	// 创建目录
-	//*
+	/*
 	MyCreateDirectory MCD = (MyCreateDirectory)GetProcAddress(h, "MyCreateDirectory");
 	res = MCD("c:\\", "huangjunqin123");
 	cout << "MyCreateDirectory => return " << res << endl;

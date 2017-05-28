@@ -38,6 +38,7 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 			}
 		}
 	}
+	if (FileHandle != 0) syncFat12();
 	ShutdownDisk();
 	return FileHandle;
 }
@@ -197,6 +198,7 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 			}
 		}
 	}
+	if (result) syncFat12();
 	ShutdownDisk();
 	return result;
 }
@@ -318,6 +320,7 @@ DWORD MyWriteFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToWrite) {
 			}
 			if (isExist) break;
 		} while ((parentClus = getFATValue(parentClus)) != 0xFFF && parentClus != 0);
+		if (isExist) syncFat12();
 	}
 	ShutdownDisk();
 	MySetFilePointer(dwHandle, result, MY_FILE_CURRENT); //偏移量刷新
@@ -339,11 +342,11 @@ DWORD MyReadFile(DWORD dwHandle, LPVOID pBuffer, DWORD dwBytesToRead) {
 		FstClus = getFATValue(FstClus);
 		curClusNum--;
 	}// 获取当前指针所指扇区
-	if (curClusNum > 0 || offset > hd->fileInfo.DIR_FileSize) return -1; // 超出文件偏移范围了
+	if (curClusNum > 0 || offset > (int)hd->fileInfo.DIR_FileSize) return -1; // 超出文件偏移范围了
 	int dataBase = (RsvdSecCnt + NumFATs * FATSz) * BytsPerSec + RootEntCnt * 32 + (FstClus - 2) * BytsPerSec;
 	int dataOffset = dataBase + curClusOffset; // 拿到文件指针所指位置
 	int lenOfBuffer = dwBytesToRead; // 缓冲区待读入长度
-	if (hd->fileInfo.DIR_FileSize - offset < lenOfBuffer) {
+	if ((int)hd->fileInfo.DIR_FileSize - offset < lenOfBuffer) {
 		lenOfBuffer = hd->fileInfo.DIR_FileSize - offset;
 	}
 	char* cBuffer = (char*)malloc(sizeof(u8)*lenOfBuffer); // 创建一个缓冲区
@@ -456,6 +459,7 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 			}
 		}
 	}
+	if (result) syncFat12();
 	ShutdownDisk();
 	return result;
 }
@@ -525,6 +529,7 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 			}
 		}
 	}
+	if (result) syncFat12();
 	ShutdownDisk();
 	return result;
 }
@@ -773,12 +778,11 @@ u16 getFATValue(u16 FstClus) {
 			// 注意移回来，要不然扩大了
 			bytes = bytes << 4;
 			bytes = bytes >> 4;
-			return bytes;
 		}
 		else {
 			bytes = bytes >> 4;
-			return bytes;
 		}
+		return bytes;
 	}
 }
 
@@ -864,7 +868,7 @@ BOOL writeEmptyClus(u16 FstClus, RootEntry* FileInfo) {
 	} while ((FstClus = getFATValue(FstClus)) != 0xFFF && FstClus != 0);
 	if (success == FALSE && FstClus != 0) { // 目录空间不足且不是根目录
 		u16 bytes;
-		u16* bytes_ptr;
+		u16* bytes_ptr = &bytes;
 		int fatBase = RsvdSecCnt * BytsPerSec;
 		u16 tempClus = setFATValue(1);
 		if (tempClus == 0) return FALSE;
@@ -1051,4 +1055,15 @@ void recursiveDeleteDirectory(u16 fClus) {
 			fBase += 32;
 		}
 	} while ((fClus = getFATValue(fClus)) != 0xFFF);
+}
+
+void syncFat12() {
+	int fat1Base = RsvdSecCnt * BytsPerSec;
+	int fat2Base = FATSz * BytsPerSec + fat1Base; // fat2偏移
+	char fat[512*9] = { 0 };
+	SetHeaderOffset(fat1Base, NULL, FILE_BEGIN);
+	if (ReadFromDisk(fat, FATSz * BytsPerSec, NULL) != 0) {
+		SetHeaderOffset(fat2Base, NULL, FILE_BEGIN);
+		WriteToDisk(fat, FATSz * BytsPerSec, NULL);
+	}
 }
