@@ -984,18 +984,24 @@ u16 setFATValue(int clusNum) {
 }
 
 DWORD createHandle(RootEntry* FileInfo, u16 parentClus) {
-	int i;
+	for (int j = 1; j < MAX_NUM; j++) {
+		if (dwHandles[j] != NULL) {
+			if (dwHandles[j]->fileInfo.DIR_FstClus == FileInfo->DIR_FstClus) {
+				return j; // 说明该文件已被打开，不用重新申请句柄
+			}
+		}
+	}
 	FileHandle* hd = (FileHandle*)malloc(sizeof(FileHandle)); // 统一在这里malloc
-	for (i = 1; i < MAX_NUM; i++) {
+	for (int i = 1; i < MAX_NUM; i++) {
 		if (dwHandles[i] == NULL) {
 			memcpy(&hd->fileInfo, FileInfo, 32);
 			hd->offset = 0; // 偏移量初始化为0
 			hd->parentClus = parentClus;
 			dwHandles[i] = hd;
-			break;
+			return i; //申请到了return i
 		}
 	}
-	return i;
+	return 0; //没有可用句柄 return 0
 }
 
 BOOL recoverClus(u16 fileClus) {
