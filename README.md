@@ -1,6 +1,6 @@
 # fat12
 
-多多提[issue](https://github.com/imtypist/fat12/issues/new)找bug啊各位~:approve:
+​:1234: **welcome to commit [issue](https://github.com/imtypist/fat12/issues/new)**
 
 ### 文件说明
 
@@ -116,5 +116,9 @@
 
 ### 调试
 
-用好压2345打开文件系统，就可以直接看到里面的目录、文件，这个真的爽！@[812015941](https://github.com/812015941) 操哥666，是个人才​:smile:​
+用好压2345打开文件系统，就可以直接看到里面的目录、文件，用于直观查看运行效果！但是细节的内容建议使用ultraEdit打开查看文件镜像二/十六进制码，确认格式是否正确。
+
+### LICENSE
+
+MIT
 
