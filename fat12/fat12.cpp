@@ -24,9 +24,9 @@ DWORD MyCreateFile(char *pszFolderPath, char *pszFileName) {
 	memset(FileInfo_ptr, 0, sizeof(RootEntry));
 	if (initBPB()) {
 		// 路径存在或者为根目录
-		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) <= 3) {
 			if (isFileExist(pszFileName, FstClus)) {
-				cout << pszFolderPath << '\\' << pszFileName << " has existed!" << endl;
+				//cout << pszFolderPath << '\\' << pszFileName << " has existed!" << endl;
 			}
 			else {
 				initFileInfo(FileInfo_ptr, pszFileName, 0x20, FileSize);
@@ -53,7 +53,7 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
 		// fix bug:优先级，赋值记得加括号
-		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) <= 3) {
 			u16 parentClus = FstClus;
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
@@ -110,8 +110,10 @@ DWORD MyOpenFile(char *pszFolderPath, char *pszFileName) {
 }
 
 void MyCloseFile(DWORD dwHandle) {
-	free(dwHandles[dwHandle]);
-	dwHandles[dwHandle] = NULL;
+	if (dwHandles[dwHandle] != NULL) {
+		free(dwHandles[dwHandle]);
+		dwHandles[dwHandle] = NULL;
+	}
 }
 
 BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
@@ -122,7 +124,7 @@ BOOL MyDeleteFile(char *pszFolderPath, char *pszFileName) {
 	RootEntry FileInfo;
 	RootEntry* FileInfo_ptr = &FileInfo;
 	if (initBPB()) {
-		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) <= 3) {
 			if (isFileExist(pszFileName, FstClus)) {
 				int dataBase;
 				do {
@@ -403,10 +405,10 @@ BOOL MyCreateDirectory(char *pszFolderPath, char *pszFolderName) {
 	int dataBase;
 	if (initBPB()) {
 		// 路径存在或者为根目录
-		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) <= 3) {
 			originClus = FstClus;
 			if (isDirectoryExist(pszFolderName, FstClus)) {
-				cout << pszFolderPath << '\\' << pszFolderName << " has existed!" << endl;
+				//cout << pszFolderPath << '\\' << pszFolderName << " has existed!" << endl;
 			}
 			else {
 				do {
@@ -470,7 +472,7 @@ BOOL MyDeleteDirectory(char *pszFolderPath, char *pszFolderName) {
 	if (strlen(pszFolderName) > 11 || strlen(pszFolderName) <= 0) return FALSE;
 	if (initBPB()) {
 		// 路径存在或者为根目录
-		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) == 3) {
+		if ((FstClus = isPathExist(pszFolderPath)) || strlen(pszFolderPath) <= 3) {
 			// 待删除目录存在
 			if (isDirectoryExist(pszFolderName, FstClus)) {
 				int dataBase;
@@ -582,7 +584,7 @@ BOOL MySetFilePointer(DWORD dwFileHandle, int nOffset, DWORD dwMoveMethod) {
 
 BOOL initBPB() {
 	if (StartupDisk(fs)) {
-		cout << "start up disk..." << endl;
+		//cout << "start up disk..." << endl;
 		//载入BPB,偏移11个字节读取
 		SetHeaderOffset(11, NULL, FILE_BEGIN);
 		if (ReadFromDisk(bpb_ptr, 25, NULL) != 0) {
@@ -611,11 +613,11 @@ BOOL initBPB() {
 			return TRUE;
 		}
 		else {
-			cout << "read BPB fail..." << endl;
+			//cout << "read BPB fail..." << endl;
 		}
 	}
 	else {
-		cout << "cannot start up disk..." << endl;
+		//cout << "cannot start up disk..." << endl;
 	}
 	return FALSE;
 }
@@ -724,6 +726,7 @@ u16 isDirectoryExist(char *FolderName, u16 FstClus) {
 u16 isPathExist(char *pszFolderPath) {
 	char directory[12]; // 存放目录名
 	u16 FstClus = 0;
+	if (strlen(pszFolderPath) <= 3) return 0;
 	/* 从3开始，跳过盘符C:\\ */
 	int i = 3, len = 0;
 	// 设置边界值i<11
@@ -783,6 +786,9 @@ u16 getFATValue(u16 FstClus) {
 			bytes = bytes >> 4;
 		}
 		return bytes;
+	}
+	else {
+		return 0xFFF;
 	}
 }
 

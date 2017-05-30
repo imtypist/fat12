@@ -24,8 +24,8 @@ int main() {
 	//*/
 
 	// 创建文件
-	/*
-	res = MyCreateFile("c:\\", "random.txt");
+	//*
+	res = MyCreateFile("c:", "random1.txt");
 	cout << "MyCreateFile => return " << res << endl;
 	//*/
 	
